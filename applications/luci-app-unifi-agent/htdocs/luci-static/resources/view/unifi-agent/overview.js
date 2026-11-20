@@ -177,7 +177,9 @@ return view.extend({
 
 		o = s.option(form.Flag, 'apply', _('Apply controller settings'),
 			_('When off, changes from the controller are only logged.'));
-		o.default = '1';
+		/* Always written: the agent treats an unset option as off. */
+		o.default = '0';
+		o.rmempty = false;
 
 		o = s.option(form.Value, 'bridge', _('Bridge'), _('The bridge whose ports the controller manages; empty for the bridge of the management interface.'));
 		o.placeholder = desc.bridge ?? 'br-lan';
