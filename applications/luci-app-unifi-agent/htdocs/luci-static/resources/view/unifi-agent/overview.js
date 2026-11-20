@@ -121,7 +121,10 @@ return view.extend({
 			...(desc.radio_devices ?? []),
 			...uci.sections('unifi-agent', 'radio').map((s) => s.device).filter((d) => d)
 		]) ];
-		const maxPorts = desc.ports?.length || Math.max(8, ...models.map((m) => m.ports.reduce((n, r) => n + r[1], 0)));
+		/* Any model can be picked on this page, and values already saved
+		 * must stay selectable, so offer up to the largest model. */
+		const maxPorts = Math.max(8, ...models.map((m) => m.ports.reduce((n, r) => n + r[1], 0)),
+			...uci.sections('unifi-agent', 'port').map((s) => +s.unifi || 0));
 
 		const m = new form.Map('unifi-agent', _('UniFi controller'),
 			_('Presents this device to a UniFi Network controller as a UniFi switch or access point. The controller adopts it, applies its port, VLAN and Wi-Fi settings here, and shows its status. Firmware upgrades from the controller are always refused.'));
@@ -142,7 +145,8 @@ return view.extend({
 			_('The controller\'s inform address, with an IP address: <code>http://192.168.1.2:8080/inform</code>. Not needed when the controller adopts the device over SSH.'));
 		o.placeholder = 'http://192.168.1.2:8080/inform';
 		o.validate = (id, v) => {
-			const m = /^http:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?\/inform$/.exec(v);
+			/* No leading zeros: the resolver would read such an octet as octal. */
+			const m = /^http:\/\/((?:0|[1-9]\d{0,2})(?:\.(?:0|[1-9]\d{0,2})){3})(?::([1-9]\d{0,4}))?\/inform$/.exec(v);
 
 			if (!v || (m && m[1].split('.').every((o) => +o <= 255) && (m[2] == null || (+m[2] > 0 && +m[2] <= 65535))))
 				return true;
@@ -191,8 +195,10 @@ return view.extend({
 			return this.cfgvalue(section_id) || _('next free');
 		};
 		o.validate = function(section_id, value) {
-			const taken = this.section.cfgsections().filter((sid) => sid != section_id &&
-				this.section.formvalue(sid, 'unifi') == value);
+			/* The row editor works on a copy of one section, so check the
+			 * other rows in the configuration itself. */
+			const taken = uci.sections('unifi-agent', 'port').filter((s) =>
+				s['.name'] != section_id && s.unifi == value);
 
 			return (!value || !taken.length) || _('UniFi port %s is already mapped').format(value);
 		};

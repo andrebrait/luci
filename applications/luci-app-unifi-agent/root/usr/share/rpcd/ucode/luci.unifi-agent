@@ -22,8 +22,20 @@ return {
 		// The device as the controller sees it, from the saved config.
 		describe: {
 			call: function() {
-				let p = profile.load();
-				let d = diagram.describe(p, load_state());
+				let radios = [];
+
+				cursor().foreach('wireless', 'wifi-device', (s) => push(radios, s['.name']));
+
+				let p, d;
+
+				try {
+					p = profile.load();
+					d = diagram.describe(p, load_state());
+				}
+				catch (e) {
+					// The page still needs the radio names to fix the mapping.
+					return { result: { radio_devices: radios, error: `${e}` } };
+				}
 				let unhandled = readfile('/tmp/unifi-agent/unhandled');
 
 				d.bridge = p.bridge;
@@ -31,8 +43,7 @@ return {
 
 				// Radio names for the mapping form, so the page needs no
 				// access to the wireless config and its keys.
-				d.radio_devices = [];
-				cursor().foreach('wireless', 'wifi-device', (s) => push(d.radio_devices, s['.name']));
+				d.radio_devices = radios;
 				d.unhandled = unhandled ? filter(split(unhandled, '\n'), length) : [];
 
 				return { result: d };
