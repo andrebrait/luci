@@ -21,9 +21,12 @@ return {
 		// The device as the controller sees it, from the saved config.
 		describe: {
 			call: function() {
-				let d = diagram.describe(profile.load(), load_state());
+				let p = profile.load();
+				let d = diagram.describe(p, load_state());
 				let unhandled = readfile('/tmp/unifi-agent/unhandled');
 
+				d.bridge = p.bridge;
+				d.interface = p.mgmt_interface;
 				d.unhandled = unhandled ? filter(split(unhandled, '\n'), length) : [];
 
 				return { result: d };

@@ -142,8 +142,8 @@ return view.extend({
 			_('When off, changes from the controller are only logged.'));
 		o.default = '1';
 
-		o = s.option(form.Value, 'bridge', _('Bridge'), _('The bridge whose ports the controller manages.'));
-		o.placeholder = 'br-lan';
+		o = s.option(form.Value, 'bridge', _('Bridge'), _('The bridge whose ports the controller manages; empty for the bridge of the management interface.'));
+		o.placeholder = desc.bridge ?? 'br-lan';
 
 		o = s.option(form.Value, 'interface', _('Management interface'));
 		o.placeholder = 'lan';
@@ -167,6 +167,9 @@ return view.extend({
 		o.value('', _('next free'));
 		for (let i = 1; i <= maxPorts; i++)
 			o.value(String(i));
+		o.textvalue = function(section_id) {
+			return this.cfgvalue(section_id) || _('next free');
+		};
 
 		o = s.option(form.ListValue, 'device', _('Local port'));
 		ports.forEach((p) => o.value(p));
@@ -175,6 +178,9 @@ return view.extend({
 		o = s.option(form.ListValue, 'media', _('Media'));
 		o.value('', _('detect'));
 		[ 'GE', 'SFP', 'SFP+', 'SFP28' ].forEach((v) => o.value(v));
+		o.textvalue = function(section_id) {
+			return this.cfgvalue(section_id) || _('detect');
+		};
 
 		o = s.option(form.Flag, 'poe', _('PoE'), _('Report PoE and switch it through netifd.'));
 
