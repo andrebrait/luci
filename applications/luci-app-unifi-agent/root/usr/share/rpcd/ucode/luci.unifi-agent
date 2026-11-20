@@ -1,0 +1,64 @@
+// Copyright 2026 Andre Brait <andrebrait@gmail.com>
+// Licensed to the public under the Apache License 2.0.
+
+'use strict';
+
+import * as profile from 'unifi.profile';
+import * as diagram from 'unifi.diagram';
+import { readfile } from 'fs';
+import { cursor } from 'uci';
+
+function load_state() {
+	try {
+		return json(readfile('/etc/unifi-agent/state.json'));
+	}
+	catch (e) {
+		return {};
+	}
+}
+
+return {
+	'luci.unifi-agent': {
+		// The device as the controller sees it, from the saved config.
+		describe: {
+			call: function() {
+				let radios = [];
+
+				cursor().foreach('wireless', 'wifi-device', (s) => push(radios, s['.name']));
+
+				let p, d;
+
+				try {
+					p = profile.load();
+					d = diagram.describe(p, load_state());
+				}
+				catch (e) {
+					// The page still needs the radio names to fix the mapping.
+					return { result: { radio_devices: radios, error: e.message ?? `${e}` } };
+				}
+				let unhandled = readfile('/tmp/unifi-agent/unhandled');
+
+				d.bridge = p.bridge;
+				d.interface = p.mgmt_interface;
+
+				// Radio names for the mapping form, so the page needs no
+				// access to the wireless config and its keys.
+				d.radio_devices = radios;
+				d.unhandled = unhandled ? filter(split(unhandled, '\n'), length) : [];
+
+				return { result: d };
+			}
+		},
+
+		models: {
+			call: function() {
+				let out = [];
+
+				for (let id, m in profile.load_models())
+					push(out, { id, name: m.name, ports: m.ports ?? [], radios: map(m.radios ?? [], (r) => r.radio) });
+
+				return { result: out };
+			}
+		}
+	}
+};
