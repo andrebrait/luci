@@ -177,7 +177,7 @@ return view.extend({
 
 		o = s.option(form.Flag, 'apply', _('Apply controller settings'),
 			_('When off, changes from the controller are only logged.'));
-		/* Always written: the agent treats an unset option as off. */
+		/* Always written: before unifi-agent release 3, an unset apply meant on. */
 		o.default = '0';
 		o.rmempty = false;
 
