@@ -121,10 +121,11 @@ return view.extend({
 			...(desc.radio_devices ?? []),
 			...uci.sections('unifi-agent', 'radio').map((s) => s.device).filter((d) => d)
 		]) ];
-		/* Any model can be picked on this page, and values already saved
-		 * must stay selectable, so offer up to the largest model. */
-		const maxPorts = Math.max(8, ...models.map((m) => m.ports.reduce((n, r) => n + r[1], 0)),
-			...uci.sections('unifi-agent', 'port').map((s) => +s.unifi || 0));
+		/* Any model can be picked on this page, so offer up to the largest
+		 * model, plus any other value already saved so it stays selectable. */
+		const portCount = (id) => (models.find((md) => md.id == id)?.ports ?? []).reduce((n, r) => n + r[1], 0);
+		const maxPorts = Math.max(8, ...models.map((md) => portCount(md.id)));
+		const savedPorts = uci.sections('unifi-agent', 'port').map((s) => s.unifi).filter((v) => v && !(+v >= 1 && +v <= maxPorts));
 
 		const m = new form.Map('unifi-agent', _('UniFi controller'),
 			_('Presents this device to a UniFi Network controller as a UniFi switch or access point. The controller adopts it, applies its port, VLAN and Wi-Fi settings here, and shows its status. Firmware upgrades from the controller are always refused.'));
@@ -132,7 +133,9 @@ return view.extend({
 		let s = m.section(form.NamedSection, 'main', 'agent');
 		s.render = () => E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, _('Device as the controller sees it')),
-			desc.model ? renderPanel(desc) : E('p', { 'class': 'alert-message warning' }, _('The agent did not answer; the device description is not available.')),
+			desc.model ? renderPanel(desc) : E('p', { 'class': 'alert-message warning' }, [ desc.error
+				? _('The device description is not available: %s').format(desc.error)
+				: _('The agent did not answer; the device description is not available.') ]),
 			desc.model ? renderSummary(desc) : '',
 			E('p', { 'class': 'cbi-section-descr' }, _('Reflects the saved configuration; save and apply to update it.'))
 		]);
@@ -148,7 +151,7 @@ return view.extend({
 			/* No leading zeros: the resolver would read such an octet as octal. */
 			const m = /^http:\/\/((?:0|[1-9]\d{0,2})(?:\.(?:0|[1-9]\d{0,2})){3})(?::([1-9]\d{0,4}))?\/inform$/.exec(v);
 
-			if (!v || (m && m[1].split('.').every((o) => +o <= 255) && (m[2] == null || (+m[2] > 0 && +m[2] <= 65535))))
+			if (!v || (m && m[1].split('.').every((o) => +o <= 255) && (m[2] == null || +m[2] <= 65535)))
 				return true;
 
 			return _('Use http://<IP address>:8080/inform');
@@ -191,16 +194,28 @@ return view.extend({
 		o.value('', _('next free'));
 		for (let i = 1; i <= maxPorts; i++)
 			o.value(String(i));
+		savedPorts.forEach((v) => o.value(v));
 		o.textvalue = function(section_id) {
 			return this.cfgvalue(section_id) || _('next free');
 		};
 		o.validate = function(section_id, value) {
-			/* The row editor works on a copy of one section, so check the
-			 * other rows in the configuration itself. */
-			const taken = uci.sections('unifi-agent', 'port').filter((s) =>
-				s['.name'] != section_id && s.unifi == value);
+			if (!value)
+				return true;
 
-			return (!value || !taken.length) || _('UniFi port %s is already mapped').format(value);
+			/* The agent ignores an index the model does not have. */
+			const model = uci.get('unifi-agent', 'main', 'model') ?? 'auto';
+			const count = portCount((model == 'auto') ? desc.model : model);
+
+			if (count && +value > count)
+				return _('The model has %d ports').format(count);
+
+			/* The row editor works on a copy of one section, so check the
+			 * other rows the agent uses in the configuration itself. To swap
+			 * two rows, set one to "next free" first. */
+			const taken = uci.sections('unifi-agent', 'port').filter((s) =>
+				s['.name'] != section_id && s.unifi == value && s.device && s.enabled != '0');
+
+			return !taken.length || _('UniFi port %s is already mapped').format(value);
 		};
 
 		o = s.option(form.ListValue, 'device', _('Local port'));

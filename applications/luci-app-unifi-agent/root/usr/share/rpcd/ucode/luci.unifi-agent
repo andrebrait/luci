@@ -34,7 +34,7 @@ return {
 				}
 				catch (e) {
 					// The page still needs the radio names to fix the mapping.
-					return { result: { radio_devices: radios, error: `${e}` } };
+					return { result: { radio_devices: radios, error: e.message ?? `${e}` } };
 				}
 				let unhandled = readfile('/tmp/unifi-agent/unhandled');
 
