@@ -6,10 +6,11 @@
 import * as profile from 'unifi.profile';
 import * as diagram from 'unifi.diagram';
 import { readfile } from 'fs';
+import { cursor } from 'uci';
 
 function load_state() {
 	try {
-		return json(readfile('/etc/unifi-agent/state.json') ?? '{}');
+		return json(readfile('/etc/unifi-agent/state.json'));
 	}
 	catch (e) {
 		return {};
@@ -27,6 +28,11 @@ return {
 
 				d.bridge = p.bridge;
 				d.interface = p.mgmt_interface;
+
+				// Radio names for the mapping form, so the page needs no
+				// access to the wireless config and its keys.
+				d.radio_devices = [];
+				cursor().foreach('wireless', 'wifi-device', (s) => push(d.radio_devices, s['.name']));
 				d.unhandled = unhandled ? filter(split(unhandled, '\n'), length) : [];
 
 				return { result: d };
@@ -38,7 +44,7 @@ return {
 				let out = [];
 
 				for (let id, m in profile.load_models())
-					push(out, { id, name: m.name, type: m.type, ports: m.ports, radios: map(m.radios ?? [], (r) => r.radio) });
+					push(out, { id, name: m.name, ports: m.ports ?? [], radios: map(m.radios ?? [], (r) => r.radio) });
 
 				return { result: out };
 			}

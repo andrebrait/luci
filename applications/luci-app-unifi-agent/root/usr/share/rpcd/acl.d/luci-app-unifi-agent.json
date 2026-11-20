@@ -1,12 +1,12 @@
 {
 	"luci-app-unifi-agent": {
-		"description": "Grant access to the UniFi controller agent",
+		"description": "Grant access to the UniFi controller agent; write access lets the user hand network and Wi-Fi configuration to a controller of their choice",
 		"read": {
 			"ubus": {
 				"luci": [ "getBuiltinEthernetPorts" ],
 				"luci.unifi-agent": [ "describe", "models" ]
 			},
-			"uci": [ "unifi-agent", "wireless" ]
+			"uci": [ "unifi-agent" ]
 		},
 		"write": {
 			"uci": [ "unifi-agent" ]

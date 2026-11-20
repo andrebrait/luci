@@ -4,7 +4,7 @@
 include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=LuCI support for the UniFi controller agent
-LUCI_DEPENDS:=+luci-base +unifi-agent
+LUCI_DEPENDS:=+luci-base +rpcd-mod-ucode +unifi-agent
 
 PKG_LICENSE:=Apache-2.0
 PKG_MAINTAINER:=Andre Brait <andrebrait@gmail.com>

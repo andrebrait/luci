@@ -61,10 +61,10 @@ function renderPanel(d) {
 			? _('UniFi port %d is local port %s (%s)').format(p.idx, p.device, (p.speeds ?? []).map(speedLabel).join('/') || _('speeds unknown'))
 			: _('UniFi port %d has no local port').format(p.idx)
 	}, [
-		E('strong', {}, String(p.idx)),
-		E('small', {}, p.media),
-		E('span', {}, p.device ?? '—'),
-		E('small', {}, [ speedLabel(p.max_speed), p.poe ? ' PoE' : '' ].join(''))
+		E('strong', {}, [ p.idx ]),
+		E('small', {}, [ p.media ]),
+		E('span', {}, [ p.device ?? '—' ]),
+		E('small', {}, [ speedLabel(p.max_speed) + (p.poe ? ' PoE' : '') ])
 	]);
 
 	return E('div', { 'style': 'display:flex;flex-wrap:wrap;gap:1em;align-items:flex-start' },
@@ -83,16 +83,19 @@ function renderSummary(d) {
 		rows.push([ _('Radios'), d.radios.map((r) => `${r.name}: ${BANDS[r.band] ?? r.band}, ${r.nss ?? '?'}x${r.nss ?? '?'} → ${r.device}`).join(', ') ]);
 
 	if (d.unmapped_ports?.length)
-		rows.push([ _('Not reported'), d.unmapped_ports.join(', ') ]);
+		rows.push([ _('Ports not reported'), d.unmapped_ports.join(', ') ]);
+
+	if (d.unmapped_radios?.length)
+		rows.push([ _('Radios not reported'), d.unmapped_radios.join(', ') ]);
 
 	if (d.candidates?.length)
 		rows.push([ _('Models that fit'), d.candidates.join(', ') ]);
 
 	if (d.unhandled?.length)
-		rows.push([ _('Controller settings not applied'), E('small', {}, d.unhandled.join(' ')) ]);
+		rows.push([ _('Controller settings not applied'), E('small', {}, [ d.unhandled.join(' ') ]) ]);
 
 	return E('table', { 'class': 'table' }, rows.map(([ k, v ]) =>
-		E('tr', { 'class': 'tr' }, [ E('td', { 'class': 'td left', 'width': '33%' }, k), E('td', { 'class': 'td left' }, v) ])));
+		E('tr', { 'class': 'tr' }, [ E('td', { 'class': 'td left', 'width': '33%' }, k), E('td', { 'class': 'td left' }, [ v ]) ])));
 }
 
 return view.extend({
@@ -101,24 +104,33 @@ return view.extend({
 			L.resolveDefault(callDescribe(), {}),
 			L.resolveDefault(callModels(), []),
 			L.resolveDefault(callGetBuiltinEthernetPorts(), []),
-			uci.load('wireless').catch(() => null),
 			uci.load('unifi-agent')
 		]);
 	},
 
 	render([ desc, models, builtinPorts ]) {
-		const ports = builtinPorts.map((p) => p.device).sort(L.naturalCompare);
-		const radios = uci.sections('wireless', 'wifi-device').map((s) => s['.name']);
-		const maxPorts = Math.max(8, ...models.map((m) => m.ports.reduce((n, r) => n + r[1], 0)));
+		/* Offer every port the agent could map, and keep values already set,
+		 * so saving a row never swaps its port for another. */
+		const ports = [ ...new Set([
+			...builtinPorts.map((p) => p.device),
+			...(desc.ports ?? []).map((p) => p.device).filter((d) => d),
+			...(desc.unmapped_ports ?? []),
+			...uci.sections('unifi-agent', 'port').map((s) => s.device).filter((d) => d)
+		]) ].sort(L.naturalCompare);
+		const radios = [ ...new Set([
+			...(desc.radio_devices ?? []),
+			...uci.sections('unifi-agent', 'radio').map((s) => s.device).filter((d) => d)
+		]) ];
+		const maxPorts = desc.ports?.length || Math.max(8, ...models.map((m) => m.ports.reduce((n, r) => n + r[1], 0)));
 
 		const m = new form.Map('unifi-agent', _('UniFi controller'),
 			_('Presents this device to a UniFi Network controller as a UniFi switch or access point. The controller adopts it, applies its port, VLAN and Wi-Fi settings here, and shows its status. Firmware upgrades from the controller are always refused.'));
 
-		let s = m.section(form.NamedSection, 'main', 'agent', _('Device as the controller sees it'));
+		let s = m.section(form.NamedSection, 'main', 'agent');
 		s.render = () => E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, _('Device as the controller sees it')),
-			renderPanel(desc),
-			renderSummary(desc),
+			desc.model ? renderPanel(desc) : E('p', { 'class': 'alert-message warning' }, _('The agent did not answer; the device description is not available.')),
+			desc.model ? renderSummary(desc) : '',
 			E('p', { 'class': 'cbi-section-descr' }, _('Reflects the saved configuration; save and apply to update it.'))
 		]);
 
@@ -129,7 +141,14 @@ return view.extend({
 		o = s.option(form.Value, 'inform_url', _('Inform URL'),
 			_('The controller\'s inform address, with an IP address: <code>http://192.168.1.2:8080/inform</code>. Not needed when the controller adopts the device over SSH.'));
 		o.placeholder = 'http://192.168.1.2:8080/inform';
-		o.validate = (id, v) => (!v || /^http:\/\/\d{1,3}(\.\d{1,3}){3}(:\d+)?\/inform$/.test(v)) || _('Use http://<IP address>:8080/inform');
+		o.validate = (id, v) => {
+			const m = /^http:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?\/inform$/.exec(v);
+
+			if (!v || (m && m[1].split('.').every((o) => +o <= 255) && (m[2] == null || (+m[2] > 0 && +m[2] <= 65535))))
+				return true;
+
+			return _('Use http://<IP address>:8080/inform');
+		};
 
 		o = s.option(form.ListValue, 'model', _('Model'),
 			_('The UniFi model the controller is shown. Its port layout decides which settings the controller offers.'));
@@ -146,15 +165,16 @@ return view.extend({
 		o.placeholder = desc.bridge ?? 'br-lan';
 
 		o = s.option(form.Value, 'interface', _('Management interface'));
-		o.placeholder = 'lan';
+		o.placeholder = desc.interface ?? 'lan';
 
 		o = s.option(form.Flag, 'ssh_adopt', _('SSH adoption'),
-			_('While not adopted, let the controller adopt over SSH as user ubnt, which can only adopt the device and is removed once adopted.'));
-		o.default = '1';
+			_('Needed when the controller is on this device\'s subnet. While not adopted, user ubnt (password ubnt) can log in to adopt the device; the account is removed once adopted. Turn it on only for the adoption: on port 22 that login can also forward connections.'));
+		o.default = '0';
 
 		o = s.option(form.Value, 'ssh_port', _('SSH adoption port'));
 		o.datatype = 'port';
 		o.placeholder = '2222';
+		o.retain = true;
 		o.depends('ssh_adopt', '1');
 
 		s = m.section(form.GridSection, 'port', _('Port mapping'),
@@ -170,6 +190,12 @@ return view.extend({
 		o.textvalue = function(section_id) {
 			return this.cfgvalue(section_id) || _('next free');
 		};
+		o.validate = function(section_id, value) {
+			const taken = this.section.cfgsections().filter((sid) => sid != section_id &&
+				this.section.formvalue(sid, 'unifi') == value);
+
+			return (!value || !taken.length) || _('UniFi port %s is already mapped').format(value);
+		};
 
 		o = s.option(form.ListValue, 'device', _('Local port'));
 		ports.forEach((p) => o.value(p));
@@ -177,7 +203,7 @@ return view.extend({
 
 		o = s.option(form.ListValue, 'media', _('Media'));
 		o.value('', _('detect'));
-		[ 'GE', 'SFP', 'SFP+', 'SFP28' ].forEach((v) => o.value(v));
+		[ 'GE', 'SFP', 'SFP+', 'SFP28', 'QSFP28' ].forEach((v) => o.value(v));
 		o.textvalue = function(section_id) {
 			return this.cfgvalue(section_id) || _('detect');
 		};
