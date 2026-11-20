@@ -163,6 +163,17 @@ return view.extend({
 		models.sort((a, b) => a.id.localeCompare(b.id)).forEach((md) =>
 			o.value(md.id, `${md.id}: ${md.name} (${portsLabel(md.ports)}${md.radios.length ? ', ' + md.radios.map((r) => BANDS[r] ?? r).join('/') : ''})`));
 		o.default = 'auto';
+		o.validate = function(section_id, value) {
+			/* Saved mappings must fit the model, or the agent drops them. With
+			 * auto, the model is known only after saving: checked against the
+			 * current one. */
+			const count = portCount((value == 'auto') ? desc.model : value);
+			const over = uci.sections('unifi-agent', 'port').filter((s) =>
+				s.device && s.enabled != '0' && +s.unifi > count);
+
+			return (!count || !over.length) ||
+				_('Port %s is mapped to UniFi port %s; this model has %d ports').format(over[0].device, over[0].unifi, count);
+		};
 
 		o = s.option(form.Flag, 'apply', _('Apply controller settings'),
 			_('When off, changes from the controller are only logged.'));
@@ -196,7 +207,8 @@ return view.extend({
 			o.value(String(i));
 		savedPorts.forEach((v) => o.value(v));
 		o.textvalue = function(section_id) {
-			return this.cfgvalue(section_id) || _('next free');
+			/* Grid cells take HTML: escape the stored value. */
+			return '%h'.format(this.cfgvalue(section_id) || _('next free'));
 		};
 		o.validate = function(section_id, value) {
 			if (!value)
@@ -226,7 +238,7 @@ return view.extend({
 		o.value('', _('detect'));
 		[ 'GE', 'SFP', 'SFP+', 'SFP28', 'QSFP28' ].forEach((v) => o.value(v));
 		o.textvalue = function(section_id) {
-			return this.cfgvalue(section_id) || _('detect');
+			return '%h'.format(this.cfgvalue(section_id) || _('detect'));
 		};
 
 		o = s.option(form.Flag, 'poe', _('PoE'), _('Report PoE and switch it through netifd.'));
