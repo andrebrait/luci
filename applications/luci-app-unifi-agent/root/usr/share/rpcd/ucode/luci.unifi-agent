@@ -1,0 +1,36 @@
+// Copyright 2026 Andre Brait <andrebrait@gmail.com>
+// Licensed to the public under the Apache License 2.0.
+
+'use strict';
+
+import * as profile from 'unifi.profile';
+import * as diagram from 'unifi.diagram';
+import { load_state } from 'unifi.session';
+import { readfile } from 'fs';
+
+return {
+	'luci.unifi-agent': {
+		// The device as the controller sees it, from the saved config.
+		describe: {
+			call: function() {
+				let d = diagram.describe(profile.load(), load_state());
+				let unhandled = readfile('/tmp/unifi-agent/unhandled');
+
+				d.unhandled = unhandled ? filter(split(unhandled, '\n'), length) : [];
+
+				return { result: d };
+			}
+		},
+
+		models: {
+			call: function() {
+				let out = [];
+
+				for (let id, m in profile.load_models())
+					push(out, { id, name: m.name, type: m.type, ports: m.ports, radios: map(m.radios ?? [], (r) => r.radio) });
+
+				return { result: out };
+			}
+		}
+	}
+};

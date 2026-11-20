@@ -1,0 +1,14 @@
+{
+	"admin/services/unifi-agent": {
+		"title": "UniFi controller",
+		"order": 60,
+		"action": {
+			"type": "view",
+			"path": "unifi-agent/overview"
+		},
+		"depends": {
+			"acl": [ "luci-app-unifi-agent" ],
+			"uci": { "unifi-agent": true }
+		}
+	}
+}

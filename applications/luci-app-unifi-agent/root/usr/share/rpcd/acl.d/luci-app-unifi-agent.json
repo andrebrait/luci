@@ -1,0 +1,15 @@
+{
+	"luci-app-unifi-agent": {
+		"description": "Grant access to the UniFi controller agent",
+		"read": {
+			"ubus": {
+				"luci": [ "getBuiltinEthernetPorts" ],
+				"luci.unifi-agent": [ "describe", "models" ]
+			},
+			"uci": [ "unifi-agent", "wireless" ]
+		},
+		"write": {
+			"uci": [ "unifi-agent" ]
+		}
+	}
+}
