@@ -24,6 +24,17 @@ const callGetBuiltinEthernetPorts = rpc.declare({
 
 const BANDS = { ng: '2.4 GHz', na: '5 GHz', '6e': '6 GHz' };
 
+const CATEGORIES = {
+	vlans: _('VLANs and networks on ports'),
+	ports: _('Port controls: enable, speed, flow control, EEE, isolation, PoE'),
+	lag: _('Link aggregation'),
+	stp: _('Spanning tree'),
+	igmp: _('IGMP snooping'),
+	jumbo: _('Jumbo frames'),
+	mirror: _('Port mirroring and rate limits'),
+	wifi: _('Wi-Fi')
+};
+
 function isFiber(media) {
 	return /^Q?SFP/.test(media ?? '');
 }
@@ -76,7 +87,9 @@ function renderSummary(d) {
 		[ _('Shown as'), `${d.model_display} (${d.model})` ],
 		[ _('Controller'), d.inform_url || _('not set') ],
 		[ _('State'), d.adopted ? (d.gcm ? _('Adopted, AES-GCM') : _('Adopted')) : _('Not adopted') ],
-		[ _('Changes from the controller'), d.apply ? _('Applied') : _('Logged only') ]
+		[ _('Changes from the controller'), !d.apply ? _('Logged only')
+			: (d.apply_cats?.length >= Object.keys(CATEGORIES).length) ? _('All applied')
+			: _('Applied: %s').format(d.apply_cats.map((k) => CATEGORIES[k] ?? k).join(', ')) ]
 	];
 
 	if (d.radios?.length)
@@ -175,11 +188,17 @@ return view.extend({
 				_('Port %s is mapped to UniFi port %s; this model has %d ports').format(over[0].device, over[0].unifi, count);
 		};
 
-		o = s.option(form.Flag, 'apply', _('Apply controller settings'),
-			_('When off, changes from the controller are only logged.'));
-		/* Always written: before unifi-agent release 3, an unset apply meant on. */
-		o.default = '0';
-		o.rmempty = false;
+		o = s.option(form.MultiValue, 'apply', _('Apply controller settings'),
+			_('Only the chosen kinds of settings are applied; what the others would change is logged. None chosen: everything is only logged.'));
+		Object.entries(CATEGORIES).forEach(([ k, v ]) => o.value(k, v));
+		o.display_size = 8;
+		o.placeholder = _('None: log only');
+		/* '1' in the config means every category */
+		o.cfgvalue = function(section_id) {
+			const v = L.toArray(uci.get('unifi-agent', section_id, 'apply'));
+
+			return v.some((x) => [ '1', 'on', 'true', 'yes', 'enabled' ].includes(x)) ? Object.keys(CATEGORIES) : v.filter((x) => x in CATEGORIES);
+		};
 
 		o = s.option(form.Value, 'bridge', _('Bridge'), _('The bridge whose ports the controller manages; empty for the bridge of the management interface.'));
 		o.placeholder = desc.bridge ?? 'br-lan';
