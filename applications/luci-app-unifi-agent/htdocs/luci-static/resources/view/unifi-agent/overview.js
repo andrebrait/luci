@@ -88,7 +88,7 @@ function renderSummary(d) {
 		[ _('Controller'), d.inform_url || _('not set') ],
 		[ _('State'), d.adopted ? (d.gcm ? _('Adopted, AES-GCM') : _('Adopted')) : _('Not adopted') ],
 		[ _('Changes from the controller'), !d.apply ? _('Logged only')
-			: (d.apply_cats?.length >= Object.keys(CATEGORIES).length) ? _('All applied')
+			: (!d.apply_cats || d.apply_cats.length >= Object.keys(CATEGORIES).length) ? _('All applied')
 			: _('Applied: %s').format(d.apply_cats.map((k) => CATEGORIES[k] ?? k).join(', ')) ]
 	];
 
